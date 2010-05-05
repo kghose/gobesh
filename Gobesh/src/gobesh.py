@@ -16,36 +16,34 @@ def initialize_global_variables(GVD):
   error = False
   GV = {}
   for key in GVD.keys():
-    if GVD[key].has_key('default'):
-      GV[key] = GVD[key]['default']
-    else:
-      error = True
-      logger.error('Global variable %s has no default value' %(key))
+    GV[key] = GVD[key]
   return GV, error
 
+#Need to work out initialization variables
 def initialize_devices(DeviceDefinitions, GV):
   error = False
   DeviceList = {}
   for key in DeviceDefinitions.keys():
     if DeviceDefinitions[key].has_key('class'):
-      DeviceList[key] = eval(DeviceDefinitions[key]['class'])
+      DeviceList[key] = eval(DeviceDefinitions[key]['class'] + '()')
       DeviceList[key].initialize(GV)#Need to fix variable passing      
     else:
       error = True
       logger.error('Device %s has class definition' %(key))
-  return DeviceList, error    
+  return DeviceList, error
 
 def quit_devices(DeviceList):
   for key in DeviceList.keys():
     DeviceList[key].quit() #Gotta fix state_event and variables
   
 
-def poll_devices(DeviceList,timestamp,GV):
+def poll_devices(DeviceList, timestamp, state_events, GV):
   device_events = []
   for key in DeviceList.keys():
-    this_event = DeviceList[key].poll(timestamp, [], []) #Gotta fix state_event and variables
+    input_variables = [GV['A'], GV['B']]
+    this_event, output_variables = DeviceList[key].poll(timestamp, [], input_variables) #Gotta fix state_event and variables
     if this_event is not None:
-      device_events.append(this_event)
+      device_events.append(key + '.' + this_event)
   return device_events
 
 
@@ -92,8 +90,8 @@ exec open(options.experiment_file)
 #device_event = ['controller.go', 'setuptrial.done', 'fixation.fixate', 
 #                'fixdurationtimer.done','intertrialwait.done','setuptrial.done',
 #                'controller.abort','abort.done','controller.quit'] #Events emitted by device
-device_event = []
-state_event = [] #Events emitted by states
+device_events = []
+state_events = [] #Events emitted by states
 GV, var_error = initialize_global_variables(GlobalVariableDefinitions)
 DeviceList, dev_error = initialize_devices(DeviceDefinitions, GV)
 error = False #TODO proper error checking
@@ -103,19 +101,19 @@ timestamp = 0
 state = 'Wait' #Built in start state
 while state != 'Exit' and not error: #last state
   #Poll devices
-  these_device_events = poll_devices(DeviceList, timestamp, GV)
+  these_device_events = poll_devices(DeviceList, timestamp, state_events, GV)
   if len(these_device_events) > 0:
-    device_event += these_device_events
-  if len(device_event) > 0:
-    this_event = device_event.pop(0)    
+    device_events += these_device_events
+  if len(device_events) > 0:
+    this_event = device_events.pop(0)    
     if StateMachine[state].has_key(this_event):
-      state_event.append(state + '.exit')
+      state_events.append(state + '.exit')
       state = StateMachine[state][this_event]
-      state_event.append(state + '.enter')
-    print state
+      state_events.append(state + '.enter')
+    print this_event, state
   time.sleep(tick_interval)
 
-print state_event
+#print state_events
 quit_devices(DeviceList)
 if error:
   print 'There were errors'
