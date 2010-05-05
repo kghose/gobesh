@@ -13,35 +13,94 @@ sys.path.append('./Modules/') #Where all the modules live
 logger = logging.getLogger('Gobesh')
 
 def initialize_global_variables(GVD):
-  error = False
-  GV = {}
-  for key in GVD.keys():
-    GV[key] = GVD[key]
-  return GV, error
+  """Turns global variable definitions into a list for quicker access.
+  Might make this more sophisticated?"""
+  GV = []
+  key_list = GVD.keys()
+  for key in key_list:
+    GV.append(GVD[key])
+  return GV, key_list
 
 #Need to work out initialization variables
-def initialize_devices(DeviceDefinitions, GV):
+def initialize_devices(DeviceDefinitions, key_list):
   error = False
   DeviceList = {}
-  for key in DeviceDefinitions.keys():
-    if DeviceDefinitions[key].has_key('class'):
-      DeviceList[key] = eval(DeviceDefinitions[key]['class'] + '()')
-      DeviceList[key].initialize(GV)#Need to fix variable passing      
+  for dev_key in DeviceDefinitions.keys():
+    this_device = None
+    if DeviceDefinitions[dev_key].has_key('class'):
+      this_device = eval(DeviceDefinitions[dev_key]['class'] + '()')
+      this_device.initialize(GV)#Need to fix variable passing      
     else:
       error = True
-      logger.error('Device %s has class definition' %(key))
+      logger.error('Device %s has no class definition' %(dev_key))
+
+    input_var_idx_list = []    
+    if DeviceDefinitions[dev_key].has_key('input variables'):
+      input_keys = DeviceDefinitions[dev_key]['input variables']
+      if input_keys is not None:
+        for var_key in input_keys:
+          try:    
+            key_idx = key_list.index(var_key)
+            input_var_idx_list.append(key_idx)
+          except ValueError:
+            logger.error('Device %s wants non existent variable %s for input' %(dev_key, var_key))        
+    else:
+      error = True
+      logger.error('Device %s has no input variable definition' %(dev_key))
+      
+    output_var_idx_list = []    
+    if DeviceDefinitions[dev_key].has_key('output variables'):
+      ouput_keys = DeviceDefinitions[dev_key]['output variables']
+      if ouput_keys is not None:
+        for var_key in ouput_keys:
+          try:    
+            key_idx = key_list.index(var_key)
+            output_var_idx_list.append(key_idx)
+          except ValueError:
+            logger.error('Device %s wants non existent variable %s for output' %(dev_key, var_key))        
+    else:
+      error = True
+      logger.error('Device %s has no output variable definition' %(dev_key))
+    
+    input_event_list = []
+    if DeviceDefinitions[dev_key].has_key('input events'):
+      input_event_def = DeviceDefinitions[dev_key]['input events']
+      if input_event_def is not None:
+        for event_key in input_event_def.keys():
+          input_event_list.append([event_key, input_event_def[event_key]])
+    else:
+      error = True
+      logger.error('Device %s has no output variable definition' %(dev_key))
+       
+    DeviceList[dev_key] = [this_device, input_var_idx_list, output_var_idx_list, input_event_list]
+  
   return DeviceList, error
 
 def quit_devices(DeviceList):
   for key in DeviceList.keys():
-    DeviceList[key].quit() #Gotta fix state_event and variables
+    DeviceList[key][0].quit() #TODO: Gotta fix state_event and variables
   
 
-def poll_devices(DeviceList, timestamp, state_events, GV):
+def poll_devices(DeviceList, timestamp, state_event, GV):
   device_events = []
   for key in DeviceList.keys():
-    input_variables = [GV['A'], GV['B']]
-    this_event, output_variables = DeviceList[key].poll(timestamp, [], input_variables) #Gotta fix state_event and variables
+    this_device = DeviceList[key]
+    state_event_for_this_device = None
+    for event_conns in this_device[3]:
+      if state_event in event_conns[1]:
+        state_event_for_this_device = event_conns[0]
+    
+    input_variables = []
+    for idx in this_device[1]:
+      input_variables.append(GV[idx])
+      
+    this_event, output_variables = this_device[0].poll(timestamp, state_event_for_this_device, input_variables) #Gotta fix state_event and variables
+
+    #But what if only a subset of outputs are returned?
+    if output_variables is not None:
+      for n, idx in enumerate(this_device[2]):
+        GV[idx] = output_variables[n]
+    
     if this_event is not None:
       device_events.append(key + '.' + this_event)
   return device_events
@@ -92,8 +151,11 @@ exec open(options.experiment_file)
 #                'controller.abort','abort.done','controller.quit'] #Events emitted by device
 device_events = []
 state_events = [] #Events emitted by states
-GV, var_error = initialize_global_variables(GlobalVariableDefinitions)
-DeviceList, dev_error = initialize_devices(DeviceDefinitions, GV)
+GV, GV_keys = initialize_global_variables(GlobalVariableDefinitions)
+print GV
+DeviceList, dev_error = initialize_devices(DeviceDefinitions, GV_keys)
+
+
 error = False #TODO proper error checking
 
 timestamp = 0
@@ -101,7 +163,12 @@ timestamp = 0
 state = 'Wait' #Built in start state
 while state != 'Exit' and not error: #last state
   #Poll devices
-  these_device_events = poll_devices(DeviceList, timestamp, state_events, GV)
+  if len(state_events) > 0:
+    this_state_event = state_events.pop(0)
+  else:
+    this_state_event = None
+  
+  these_device_events = poll_devices(DeviceList, timestamp, this_state_event, GV)
   if len(these_device_events) > 0:
     device_events += these_device_events
   if len(device_events) > 0:
@@ -111,20 +178,10 @@ while state != 'Exit' and not error: #last state
       state = StateMachine[state][this_event]
       state_events.append(state + '.enter')
     print this_event, state
-  time.sleep(tick_interval)
+  else:
+    time.sleep(tick_interval)
 
 #print state_events
 quit_devices(DeviceList)
 if error:
   print 'There were errors'
-
-
-
-#modu1.run()
-#print 'Ha'
-
-#logger.debug('This is a debug message')
-#logger.info('This is an info message')
-#logger.warning('This is a warning message')
-#logger.error('This is an error message')
-#logger.critical('This is a critical error message')

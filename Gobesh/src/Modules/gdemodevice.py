@@ -7,6 +7,7 @@ logger = logging.getLogger('Gobesh.'+__name__)
 #Imports for this device
 import time #For the sleep function
 import random
+import keyboard #Because we want to detect keypresses
 
 class GDemoDevice:
   """This device does EVERYTHING. And nothing"""
@@ -54,9 +55,10 @@ class GDemoDevice:
         if msg[1] == '2':
           device_event = 'eventout2'
       if msg[0] == 'data request':
+        print 'a=%d, b=%d' %(a,b)
         self.parent_conn.send(['data',[a,b]])
       if msg[0] == 'data':
-        output_variables = [msg[0][0], msg[0][1]]
+        output_variables = [msg[1][0], msg[1][1]]
         
     return device_event, output_variables
   
@@ -64,15 +66,30 @@ class GDemoDevice:
     """This is the function that runs in the other thread. 
     Child conn is the communication line to the other thread."""
     keep_running = True
+    #Do initialization here
+    address = ('localhost', 6001)     # family is deduced to be 'AF_INET'
+    listener = mp.connection.Listener(address, authkey='gobesh demo')
+
+    remote_conn = listener.accept()
+    logger.debug('connection accepted from:' + listener.last_accepted[0] + ':%d' %(listener.last_accepted[1]))
     
     while keep_running:
-      r = random.randint(0,50)
-      if r == 0:
-        child_conn.send(['device event','1'])
-      if r == 50:
-        child_conn.send(['device event','2'])
-      if r == 25:
-        child_conn.send(['data request'])
+
+      if remote_conn.poll():
+        c = remote_conn.recv()
+        if c == '1':
+          child_conn.send(['device event','1'])
+        if c == '2':
+          child_conn.send(['device event','2'])
+        if c == '3':
+          child_conn.send(['data request'])
+#      r = random.randint(0,50)
+#      if r == 0:
+#        child_conn.send(['device event','1'])
+#      if r == 50:
+#        child_conn.send(['device event','2'])
+#      if r == 25:
+#        child_conn.send(['data request'])
       
       if child_conn.poll():
         msg = child_conn.recv()

@@ -40,6 +40,7 @@ class GController:
     device's loop returns. In the case of the controller device we don't care
     about state_events, timestamps or variables."""
     device_event = None
+    output_variables = None
     if self.parent_conn.poll():
       #We have a message
       msg = self.parent_conn.recv()
@@ -48,7 +49,7 @@ class GController:
       else:
         device_event = None
         
-    return device_event
+    return device_event, output_variables
   
   def deviceloop(self, child_conn):
     """Child conn is the communication line to the other thread."""
