@@ -32,7 +32,8 @@ class GController:
     self.parent_conn.send('quit') #The thread (deviceloop) must understand this
     self.p.join() #or we will hang
     
-  def poll(self, timestamp, state_event, variables):
+  def poll(self, timestamp, state_event, 
+           extract_variables, input_var_idx_list, GV):
     """This is the call that is visible to the main loop. The main loop calls
     this each time it loops. state_event and variables are picked out to be the
     state_event and global variables that are connected to this device
@@ -73,4 +74,4 @@ class GController:
         child_conn.send(['device event', msg])
 
       time.sleep(0.01)
-    remote_conn.send('Bye') #Tells controller we can quit
+    remote_conn.close()

@@ -34,17 +34,17 @@ class GDemoDevice:
   def quit(self):
     """This is called when the server is about to quit."""
     self.parent_conn.send(['command','quit']) #The thread (deviceloop) must understand this
-    self.p.join() #or we will hang
+    self.p.join(1)
+    if self.p.is_alive():
+      logger.warning('Had to terminate deviceloop thread. Client probably never showed up')
+      #Usually due to our client never showing up
+      self.p.terminate()
     
-  def poll(self, timestamp, state_event, input_variables):
+  def poll(self, timestamp, state_event, 
+           extract_variables, input_var_idx_list, GV):
     """This is the call that is visible to the main loop. The main loop calls
     this each time it loops."""
-    #This is for illustration. Typically we would not hold up the thread with
-    #computations
-    a = input_variables[0]
-    b = input_variables[1]
     output_variables = None
-    
     device_event = None
     if self.parent_conn.poll():
       #We have a message
@@ -55,6 +55,9 @@ class GDemoDevice:
         if msg[1] == '2':
           device_event = 'eventout2'
       if msg[0] == 'data request':
+        input_variables = extract_variables(input_var_idx_list, GV)
+        a = input_variables[0]
+        b = input_variables[1] 
         print 'a=%d, b=%d' %(a,b)
         self.parent_conn.send(['data',[a,b]])
       if msg[0] == 'data':
@@ -74,7 +77,6 @@ class GDemoDevice:
     logger.debug('connection accepted from:' + listener.last_accepted[0] + ':%d' %(listener.last_accepted[1]))
     
     while keep_running:
-
       if remote_conn.poll():
         c = remote_conn.recv()
         if c == '1':
@@ -95,6 +97,7 @@ class GDemoDevice:
         msg = child_conn.recv()
         if msg[0] == 'command':
           if msg[1] == 'quit':
+            logger.debug('Demo device recieved quit signal')
             keep_running = False
         if msg[0] == 'data':
           a = msg[1][0]
@@ -103,3 +106,6 @@ class GDemoDevice:
           y = a + b
           child_conn.send(['data',[x,y]])
       time.sleep(0.01)
+
+    remote_conn.close()
+    child_conn.close()
