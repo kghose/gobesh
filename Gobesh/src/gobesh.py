@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """Gobesh server. Run with -h to get help. i.e
-
-python gobesh.py -h"""
+python gobesh.py -h
+"""
 
 from optparse import OptionParser
 import logging
@@ -13,16 +13,22 @@ sys.path.append('./Modules/') #Where all the modules live
 logger = logging.getLogger('Gobesh')
 
 def initialize_global_variables(GVD):
-  """Turns global variable definitions into a list for quicker access.
-  Might make this more sophisticated?"""
+  """Turns global variable definitions into a list for quicker access. This is 
+  important because we have to extract the appropriate variables from the
+  global space and pass it to the device, potentially, every poll cycle.
+  Dictionaries are easier for humans to read but carry more overhead. Since our
+  design does not call for new keys to be inserted on the fly, we simply convert
+  the dictionary into a list and keep a list of keys handy so we know what is
+  what"""
   GV = []
-  key_list = GVD.keys()
-  for key in key_list:
+  gv_key_list = GVD.keys()
+  for key in gv_key_list:
     GV.append(GVD[key])
-  return GV, key_list
+  return GV, gv_key_list
 
-#Need to work out initialization variables
-def initialize_devices(DeviceDefinitions, key_list):
+#TODO: Where to put variable initialization?
+def initialize_devices(DeviceDefinitions, gv_key_list):
+  """Given the dictionary corresponding to the device dictionary."""
   error = False
   DeviceList = {}
   for dev_key in DeviceDefinitions.keys():
@@ -40,7 +46,7 @@ def initialize_devices(DeviceDefinitions, key_list):
       if input_keys is not None:
         for var_key in input_keys:
           try:    
-            key_idx = key_list.index(var_key)
+            key_idx = gv_key_list.index(var_key)
             input_var_idx_list.append(key_idx)
           except ValueError:
             logger.error('Device %s wants non existent variable %s for input' %(dev_key, var_key))        
@@ -54,7 +60,7 @@ def initialize_devices(DeviceDefinitions, key_list):
       if ouput_keys is not None:
         for var_key in ouput_keys:
           try:    
-            key_idx = key_list.index(var_key)
+            key_idx = gv_key_list.index(var_key)
             output_var_idx_list.append(key_idx)
           except ValueError:
             logger.error('Device %s wants non existent variable %s for output' %(dev_key, var_key))        
@@ -80,7 +86,17 @@ def quit_devices(DeviceList):
   for key in DeviceList.keys():
     DeviceList[key][0].quit() #TODO: Gotta fix state_event and variables
   
-
+def extract_variables(input_var_idx_list, GV):
+  """Use the device definition to copy appropriate values from GV into a list
+  (input_variables) to be passed to the device's polling function. We pass
+  this function to the device's poll function so that the device can
+  decide if it needs the inputs and only then extraction the parameters. This
+  saves us computations.""" 
+  input_variables = []
+  for idx in input_var_idx_list:
+    input_variables.append(GV[idx])
+  return input_variables
+  
 def poll_devices(DeviceList, timestamp, state_event, GV):
   device_events = []
   for key in DeviceList.keys():
@@ -89,14 +105,14 @@ def poll_devices(DeviceList, timestamp, state_event, GV):
     for event_conns in this_device[3]:
       if state_event in event_conns[1]:
         state_event_for_this_device = event_conns[0]
-    
-    input_variables = []
-    for idx in this_device[1]:
-      input_variables.append(GV[idx])
-      
-    this_event, output_variables = this_device[0].poll(timestamp, state_event_for_this_device, input_variables) #Gotta fix state_event and variables
+        break
+          
+    this_event, output_variables = \
+    this_device[0].poll(timestamp, state_event_for_this_device, 
+                        extract_variables, this_device[1], GV)
 
-    #But what if only a subset of outputs are returned?
+    #If the device generated an output this polling cycle save it in the 
+    #appropriate place in the global variables list
     if output_variables is not None:
       for n, idx in enumerate(this_device[2]):
         GV[idx] = output_variables[n]
