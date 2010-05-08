@@ -6,7 +6,6 @@ python gobesh.py -h
 from optparse import OptionParser
 import logging
 import sys
-sys.path.append('./Modules/') #Where all the modules live
 import time #For the timestamp and sleep function
 if sys.platform == "win32":
   # On Windows, the best timer is time.clock()
@@ -82,6 +81,7 @@ def parse_command_line_args():
                     help="Run in simulation mode [%default]")
   parser.add_option("-t","--tick_rate",
                     dest="server_tick_rate", default=10000,
+                    type="float",
                     help="Server tick rate. How many times will the server poll its devices and update the statemachine per second [%default]")
   
   (options, args) = parser.parse_args()
@@ -273,7 +273,7 @@ def server_loop(options, expt_def):
       time.sleep(tick_interval)
   
   #print state_events
-  quit_devices(DeviceList)
+  quit_devices(devices)
   if error:
     print 'There were errors'  
  
