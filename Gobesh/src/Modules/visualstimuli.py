@@ -10,6 +10,9 @@ import multiprocessing as mp
 import logging
 logger = logging.getLogger('Gobesh.'+__name__)
 
+neutral_gray = 128
+max_range = 127 #needs to add up to 255 or whatever resolution we use
+
 def main():
   """If we start the server from the command line, this is the entry function."""
   options, args = parse_command_line_args()
@@ -64,7 +67,8 @@ def setup_stimuli_server(options):
 
 def setup_window(options):
   """If we have multiple screens setup fullscreen display on non secondary
-  window, else open a window on our small screen."""
+  window, else open a window on our small screen."""  
+  #http://www.pyglet.org/doc/api/pyglet.window-module.html
   display = pyglet.window.get_platform().get_default_display()
   screens = display.get_screens()
   main_screen = display.get_default_screen()
@@ -80,11 +84,17 @@ def setup_window(options):
         break
   else:
     window = pyglet.window.Window()
+
+  #This code has to come AFTER the window is initialized
+  #http://www.python-forum.org/pythonforum/viewtopic.php?f=2&t=11160
+  # using color tuple (r,g,b,a), a is alpha value
+  # rgba values are from 0.0 to 1.0
+  r = g = b = float(neutral_gray)/(neutral_gray+max_range)
+  bg = (r,g,b,1.0)
+  pyglet.gl.glClearColor(*bg)
+
   return window
   
-neutral_gray = 128
-max_range = 127 #needs to add up to 255 or whatever resolution we use
-
 def server_loop(device, options):
   window = device['window']
   gabor = gabor_patch()
