@@ -1,0 +1,487 @@
+#LyX 1.6.5 created this file. For more info see http://www.lyx.org/
+\lyxformat 345
+\begin_document
+\begin_header
+\textclass article
+\use_default_options true
+\language english
+\inputencoding auto
+\font_roman default
+\font_sans default
+\font_typewriter default
+\font_default_family sfdefault
+\font_sc false
+\font_osf false
+\font_sf_scale 100
+\font_tt_scale 100
+
+\graphics pdftex
+\paperfontsize default
+\spacing single
+\use_hyperref false
+\papersize default
+\use_geometry false
+\use_amsmath 1
+\use_esint 1
+\cite_engine basic
+\use_bibtopic false
+\paperorientation portrait
+\secnumdepth 3
+\tocdepth 3
+\paragraph_separation indent
+\defskip medskip
+\quotes_language english
+\papercolumns 1
+\papersides 1
+\paperpagestyle fancy
+\tracking_changes false
+\output_changes false
+\author "" 
+\author "" 
+\end_header
+
+\begin_body
+
+\begin_layout Title
+Gobesh
+\end_layout
+
+\begin_layout Author
+Kaushik Ghose (kghose@users.sf.net)
+\end_layout
+
+\begin_layout Abstract
+Gobesh is a software framework for running experiments.
+ In Gobesh the experiment is structured as a state machine and a collection
+ of experiment devices.
+ The state machine is responsible for progressing the experiment through
+ sessions and trials and within a trial as a sequence of operations.
+ Experiment devices represent user interfaces to control the experiment,
+ data devices that collect data from the experiment, stimulus devices that
+ present stimuli and outputs to the external world and computational devices
+ that perform online computations as the experiment progresses.
+ The core of Goebsh is written in Python, but hooks from other languages
+ (such as C) to Python allow devices to be written in any language and hooked
+ into Gobesh.
+ The use and philosophy of Gobesh is introduced in this document by using
+ an example - a psychophysical experiment using a two interval forced choice
+ experiment with simultaneous neurophysiological data collection.
+\end_layout
+
+\begin_layout Section
+What and why
+\end_layout
+
+\begin_layout Standard
+I wrote Gobesh because I wanted a computer framework with which to run my
+ psychophysical/neurophysiological experiments.
+ I wanted to be able to easily create and modify experimental protocols
+ and to easily integrate experimental hardware.
+ Experiments vary quite a bit in their requirements and data collection
+ hardware changes over the years.
+ I wanted a framework that was modular enough to allow a collection of easily
+ swappable parts that allows the easy creation an debugging of experiments
+ and can be learned by scientists with minimal computer programming experience.
+ 
+\end_layout
+
+\begin_layout Standard
+My first exposure to experiment control software of this kind was lablib,
+ written by John Maunsell.
+ I found lablib's user interface and modular concept very practical, but
+ I did not like that everything was written in C and written to only run
+ on Macintosh hardware.
+ The complex integration of user interface and experiment control flow and
+ the intricacies of threading and pointers and data structures in C make
+ writing and debugging a new plugin for an experiment a tedious process
+ until the experimenter is very familiar with the internals of lablib.
+ 
+\end_layout
+
+\begin_layout Standard
+The next framework I was exposed to was MonkeyWorks, written by a consortium
+ based largely at MIT.
+ I never used MonkeyWorks and only spoke with developers working on it,
+ but that experience convinced me that another complex, intricate framework
+ written in C++ using the STL was not going to address my dissatisfaction
+ with lablib.
+\end_layout
+
+\begin_layout Subsection
+Specifications for Gobesh
+\end_layout
+
+\begin_layout Standard
+I decided to proceed with my own experimental framework with the following
+ specifications:
+\end_layout
+
+\begin_layout Enumerate
+Experiments should be easy to construct and the description should be compact
+ and teachable to scientists with little experience in computer programming
+\end_layout
+
+\begin_layout Enumerate
+The framework should allow easy reuse of standard modules for new experiments
+\end_layout
+
+\begin_layout Enumerate
+The framework should allow easy integration of external experimental devices
+\end_layout
+
+\begin_layout Enumerate
+The framework should be able to integrate devices spread across multiple
+ machines running different operating systems
+\end_layout
+
+\begin_layout Enumerate
+Modules should be writable in any language
+\end_layout
+
+\begin_layout Enumerate
+User interfaces should be separate from the core experimental code
+\end_layout
+
+\begin_layout Standard
+I picked Python as the language for Gobesh as I had finished transitioning
+ to Python from Matlab for my analysis needs and was very satisfied with
+ the Python language.
+ As will become apparent over the next few chapters Python also has many
+ standard modules and features that made it quite convenient to use for
+ this framework.
+\end_layout
+
+\begin_layout Section
+An example experiment
+\end_layout
+
+\begin_layout Standard
+I will introduce Gobesh's structure by picking an example experiment and
+ showing how it is broken up into components that are then implemented under
+ Gobesh.
+ Consider an experiment that uses the two interval forced choice (2IFC)
+ paradigm in conjunction with a stair case procedure to determine the detection
+ threshold for a visual stimulus.
+ The sequence of events in the experiment is shown in the schematic in Fig.
+ 
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "Flo:2ifc"
+
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Standard
+\begin_inset Float figure
+placement h
+wide false
+sideways false
+status open
+
+\begin_layout Plain Layout
+\begin_inset Graphics
+	filename two_ifc_task_schematic.pdf
+	width 12cm
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Plain Layout
+\begin_inset Caption
+
+\begin_layout Plain Layout
+Two interval forced choice experiment.
+\end_layout
+
+\end_inset
+
+
+\begin_inset CommandInset label
+LatexCommand label
+name "Flo:2ifc"
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+
+ 
+\end_layout
+
+\begin_layout Enumerate
+The subject sits in front of a monitor showing a uniform gray background.
+ 
+\end_layout
+
+\begin_layout Enumerate
+The computer randomly chooses which interval to present the stimulus
+\end_layout
+
+\begin_layout Enumerate
+The computer chooses the strength of the stimulus based on the staircase
+ procedure (more on that later)
+\end_layout
+
+\begin_layout Enumerate
+A small white spot (called the fixation spot) is shown on the screen.
+ 
+\end_layout
+
+\begin_layout Enumerate
+The subject looks at the fixation spot and holds his eyes on it (fixates)
+ indicating he is ready to start the trial.
+ The subject must fixate until the very end of the trial.
+\end_layout
+
+\begin_layout Enumerate
+After a short gap, the first interval is presented, marked by a tone 
+\end_layout
+
+\begin_layout Enumerate
+A gap separates the two intervals
+\end_layout
+
+\begin_layout Enumerate
+The second interval is presented, also marked by a tone
+\end_layout
+
+\begin_layout Enumerate
+A short gap follows the second interval
+\end_layout
+
+\begin_layout Enumerate
+The fixation spot is removed and two small choice targets are presented.
+\end_layout
+
+\begin_layout Enumerate
+The subject now fixates on one of the two targets to indicate which interval
+ he thought the stimulus was presented in.
+\end_layout
+
+\begin_layout Enumerate
+The subject is given feedback if he was right or wrong
+\end_layout
+
+\begin_layout Enumerate
+The experiment is repeated until the termination condition (described later)
+ is satisfied
+\end_layout
+
+\begin_layout Standard
+The subject is previously instructed which choice target represents which
+ stimulus interval.
+ The staircase algorithm uses the subject's history of correct and incorrect
+ responses and the corresponding stimulus strengths to determine the next
+ stimulus strength in the most efficient manner to determine the detection
+ threshold.
+ The experiment terminates when a fixed number of trials have been run,
+ or if the confidence interval on the threshold determination is within
+ a certain limit.
+\end_layout
+
+\begin_layout Subsection
+Describing the experiment in Gobesh
+\end_layout
+
+\begin_layout Standard
+This experiment is described in the Gobesh framework with two components:
+ a state machine and a collection of devices.
+ The state machine is responsible for progressing the experiment through
+ sessions and trials and within a trial as a sequence of operations.
+ Experiment devices represent user interfaces to control the experiment,
+ data devices that collect data from the experiment, stimulus devices that
+ present stimuli and outputs to the external world and computational devices
+ that perform online computations as the experiment progresses.
+\end_layout
+
+\begin_layout Subsection
+State machine for the experiment
+\end_layout
+
+\begin_layout Standard
+\begin_inset Float figure
+placement H
+wide false
+sideways false
+status open
+
+\begin_layout Plain Layout
+\begin_inset Graphics
+	filename /Users/kghose/Research/2008-20XX (Monkeys)/Software/Gobesh/doc/two_ifc_state_diagram.pdf
+	width 12cm
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Plain Layout
+\begin_inset Caption
+
+\begin_layout Plain Layout
+State machine for 2IFC experiment
+\end_layout
+
+\end_inset
+
+
+\begin_inset CommandInset label
+LatexCommand label
+name "Flo:2ifc_state_machine"
+
+\end_inset
+
+
+\end_layout
+
+\end_inset
+
+The statemachine is shown in Fig.
+ 
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "Flo:2ifc_state_machine"
+
+\end_inset
+
+.
+ The states in the machine correspond almost directly to the steps in one
+ run through of the experiment as described previously.
+ The set of states at the end (ignored, broke etc.) correspond to the different
+ outcomes of the experiment.
+ Transitions from each of the states is triggered by device events which
+ are denoted with the notation 
+\begin_inset Quotes eld
+\end_inset
+
+device
+\begin_inset Quotes erd
+\end_inset
+
+.
+\begin_inset Quotes erd
+\end_inset
+
+event
+\begin_inset Quotes erd
+\end_inset
+
+ .
+ So, for example, when we are in the state 
+\begin_inset Quotes eld
+\end_inset
+
+showing fixation
+\begin_inset Quotes erd
+\end_inset
+
+ when the device called 
+\begin_inset Quotes eld
+\end_inset
+
+f
+\begin_inset Quotes erd
+\end_inset
+
+ emits the event 
+\begin_inset Quotes eld
+\end_inset
+
+fix
+\begin_inset Quotes erd
+\end_inset
+
+ we transition into the state 
+\begin_inset Quotes eld
+\end_inset
+
+pre interval
+\begin_inset Quotes erd
+\end_inset
+
+.
+ In almost any state, if we stop fixating (
+\begin_inset Quotes eld
+\end_inset
+
+f.nofix
+\begin_inset Quotes erd
+\end_inset
+
+) the trial is aborted (state goes to 
+\begin_inset Quotes eld
+\end_inset
+
+abort
+\begin_inset Quotes erd
+\end_inset
+
+).
+ The actual work is done by the devices, with the state machine serving
+ as a track on which our experiment progresses, propelled by the work of
+ the devices.
+\end_layout
+
+\begin_layout Subsection
+Devices
+\end_layout
+
+\begin_layout Standard
+\begin_inset Float figure
+wide false
+sideways false
+status open
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+\begin_inset Caption
+
+\begin_layout Plain Layout
+List of devices for 2IFC experiment
+\end_layout
+
+\end_inset
+
+
+\begin_inset CommandInset label
+LatexCommand label
+name "Flo:2ifc_devices"
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+
+The list of devices used in the example experiment is given in Fig.
+ 
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "Flo:2ifc_devices"
+
+\end_inset
+
+.
+ 
+\end_layout
+
+\end_body
+\end_document
