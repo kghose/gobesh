@@ -1,7 +1,13 @@
 #!/usr/bin/env python
+"""Need to test:
+1. how to quit app
+2. can we schedule polling socket and updaitng window separately
+3. how to layout code - class or script?"""
+
 """Server that uses pyglet and pylab to generate visual stimuli. Calling this
 starts up a visual stimuli server that listens for various commands and displays 
-stimuli accordingly"""
+stimuli accordingly.
+"""
 import pyglet
 import array
 import pylab
@@ -9,17 +15,58 @@ import pylab
 from optparse import OptionParser
 import multiprocessing as mp
 import logging
-logger = logging.getLogger('Gobesh.'+__name__)
+logger = logging.getLogger('Gobesh Visual')
 
-neutral_gray = 128
-max_range = 127 #needs to add up to 255 or whatever resolution we use
+#Some general functions that we can import, that should eventually be moved to
+#a separate module?
 
+class VisualServer:
+  """This is written as a class to allow overriding of the central logic and to
+  encapsulate some persistent shared variables."""
+  def __init__(self):
+    self.neutral_gray = 128
+    self.max_range = 127 #needs to add up to 255 or whatever resolution we use
+    self.address = ''
+    self.port = 6000
+    self.authkey = 'visual stimuli'
+    self.listener = None
+    self.remote_conn = None
+    
+  def wait_for_client(self):
+    """Wait for a client to connect and return us the connection. Putting
+    'localhost' prevents connections from outside machines."""
+    logger.debug('Waiting for client')
+    listener = self.listener    
+    while listener == None:
+      try:
+        listener = mp.connection.Listener((self.address, self.port), authkey=self.authkey)
+        self.remote_conn = listener.accept()
+        logger.debug('Connection accepted from:' + listener.last_accepted[0] + ':%d' %(listener.last_accepted[1]))
+      except AuthenticationError:
+        logger.debug('Client had wrong key')        
+
+  def poll_command_server(self, dt):
+    """Test if we have any messages. If so return the message, otherwise return
+    None."""
+    msg = None
+    try: 
+      if self.remote_conn.poll():
+        msg = self.remote_conn.recv()
+    except EOFError:
+      logger.debug('Lost connection to client')
+      self.listener.close()
+    except:
+      logger.debug('Other error')
+      self.listener.close()
+    return msg
+
+
+  
 def main():
   """If we start the server from the command line, this is the entry function."""
   options, args = parse_command_line_args()
   setup_logging(options)
-  device, error = setup_stimuli_server(options)
-  
+  device, error = setup_stimuli_server(options)  
   if not error:
     server_loop(device, options)
   else:
@@ -100,6 +147,21 @@ def setup_window(options):
   pyglet.gl.glClearColor(*bg)
 
   return window
+
+def setup_listener(sprite, batch):
+  """http://www.pyglet.org/doc/api/pyglet.clock-module.html
+  Setup things so that we listen on our open port and pass on any commands we
+  get."""
+  pyglet.clock.schedule_interval(listen, .5, sprite=sprite, batch=batch)
+  
+def listen(dt, sprite, batch):
+  """Use multiprocessing to setup a listener. We use scheduling to listen to
+  this port every once in a while"""
+  if sprite.batch == batch:
+    sprite.batch = None
+  else:
+    sprite.batch = batch
+
   
 def server_loop(device, options):
   window = device['window']
@@ -107,11 +169,27 @@ def server_loop(device, options):
 
   gabor_image = gabor_patch()
   gabor_sprite = pyglet.sprite.Sprite(gabor_image, batch=batch)
+
+  #setup_listener(gabor_sprite, batch)
+
   
   @window.event
   def on_draw():
-      window.clear()
-      batch.draw()
+    window.clear()
+    batch.draw()
+
+  @window.event
+  def on_mouse_motion(x, y, dx, dy):
+    if (x <= window.width) and (y <= window.height):
+      window.set_mouse_platform_visible(platform_visible=False)
+    else:
+      window.set_mouse_platform_visible(platform_visible=True)
+            
+    gabor_sprite.position = (x - gabor_sprite.width/2, y - gabor_sprite.height/2)
+
+  @window.event
+  def client_message(msg):
+    print msg
 
   pyglet.app.run()
 
@@ -132,24 +210,23 @@ def gabor_patch(sigma_deg = 2,
                 px_deg = 50,
                 sf_cyc_deg = 2,
                 phase_deg = 0, #phase of cosine in degrees
-                sigma_x_deg = 2,
-                sigma_y_deg = 2,
-                contrast = .15):
+                contrast = 1.0):
   """Return a gabor patch texture of the given dimensions and parameters."""
 
   height = width = radius_deg * px_deg
   x = pylab.linspace(-radius_deg, radius_deg, width)
   X, Y = pylab.meshgrid(x,x)
-  L = pylab.exp(-(X**2+Y**2)/sigma_deg)#gaussian envelope
-  #use fix to round towards zero, otherwise you will get banding artifacts
+  L = pylab.exp(-(X**2+Y**2)/sigma_deg**2)#gaussian envelope
+  #use around to round towards zero, otherwise you will get banding artifacts
   #dtype must be int for proper conversion to int and init of image data
-  I = pylab.array(pylab.fix(contrast*pylab.cos(2*pylab.pi*(sf_cyc_deg)*X + phase_deg*pylab.pi/180.)*L*max_range)+neutral_gray,dtype='int').ravel()
-  
+  #I = pylab.array(-pylab.zeros(X.size)*max_range + neutral_gray, dtype='int')
+  I = pylab.array(pylab.around(contrast*pylab.cos(2*pylab.pi*(sf_cyc_deg)*X + phase_deg*pylab.pi/180.)*L*max_range)+neutral_gray,dtype='int').ravel()
+  IA = pylab.ones(I.size * 2, dtype='int')*255
+  IA[:-1:2] = I#Need alpha=255 otherwise image is mixed with background
   #Data format for image http://www.pyglet.org/doc/programming_guide/accessing_or_providing_pixel_data.html
-  data = array.array('B', I)
-  gabor = pyglet.image.ImageData(width, height,'I',data.tostring())
+  data = array.array('B', IA)
+  gabor = pyglet.image.ImageData(width, height,'IA',data.tostring())
   return gabor
-
 
 if __name__ == '__main__':
   main()  
