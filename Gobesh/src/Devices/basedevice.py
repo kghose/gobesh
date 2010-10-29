@@ -4,136 +4,155 @@ be exposed to Gobesh."""
 import multiprocessing as mp #For threading
 import logging #We should make use of the logging function
 logger = logging.getLogger('Gobesh.'+__name__)
-from gobesh_lib import import default_timer
 
-class GBaseDevice:
+class GBaseDevice():
   """This base device can be inherited by classes that implement devices, or 
-  the 'hook' part of external devices."""
-  def __init__(self):
-    """Use this to do any fixed initialization. This is called when the server
-    (main loop) instantiates the device objects"""
-    pass
+  the 'hook' part of external devices. In most cases it will be sufficient to
+  reimplement the eventhandler method and the DeviceInterface."""
   
-  def initialize(self, config_dir = './'):
-    """This is called when the main loop initializes all the devices. It is
-    done once at startup, and again if the server is told to perform a reset.
-    This should return the device to an initial state.
-    Gobesh will pass it a directory where it can store/load settings however it 
-    wishes (though python's configuration file method is recommended).
-    The device should be able to make up default settings if no file is found.
-    It loads settings from the settings file, sets up IPC with the child process 
-    and then starts the child process. 
-    If the operations the device does are non-blocking (quick computations
-    for example) you may omit the deviceloop thread, override this function and
-    have all the logic in the poll function. Remember to put sensible values
-    for the latency tracking gobesh does.
-    For devices that do operations in the deviceloop thread it may be easiest
-    to keep this function as it is.
-    For hooks (devices running separately as a server, with gobesh interacting
-    via a socket) the deviceloop may also be omitted and the poll loop may 
-    consist of poll() commands that send and recieve data via the socket. In
-    that case initialize is used to probe for and make connections to the
-    server."""
-    #self.generate_config_fname(config_dir, my_name)
-    self.config_dir = config_dir
-    self.load_settings()
-
-    #Fixed code that should be same for all devices that start a child thread
-    self.parent_conn, child_conn = mp.Pipe() #Our means of communication
-    self.p = mp.Process(target=self.deviceloop, args=(child_conn,))
-    self.p.start()
-          
-  def load_settings(self):
-    """Load settings for this instance of the device. The directory to put
-    the configuration file is in self.config_dir"""
-    pass
-    
-  def save_settings(self):
-    pass
-    
-  def poll(self, timestamp, state_event, input_vars):
-    """This is the call that is visible to gobesh (main loop). Gobesh calls
-    this each time it loops. 
-    
-    timestamp - is obtained using the default_timer() function and sent in by
-                gobesh. This is sent in every poll period and the device 
-                can choose to use it as a synch signal.
-                Gobesh sends in a fresh time stamp for each call of poll.
-                
-    state_event - any state event(s) that this device is hooked up to. Sent as
-                  a list of strings
-                  
-    input_vars  - any input variables that this device is hooked up to 
-    
-    This function should be non-blocking. Minor computations can be done here
-    but anything major or I/O that should be running in its own time should
-    run in a different thread. In such cases this function should be a conduit
-    to deviceloop
-    
-    The return value should be the event that the device returns.
+  def __init__(self, name, queue_to_parent):
+    """This is called when the server (main loop) instantiates the device objects.
+    name - unique string among all the other names in the experiment
+    queue_to_parent - a queue onto which the device puts data and events
     """
-    device_event = None
-    output_variables = None
-    if self.parent_conn.poll():
-      #We have a message
-      msg = self.parent_conn.recv()
-      if msg[0] == 'device event':
-        device_event = msg[1]
-      else:
-        device_event = None
+    self.name = name
         
-    return device_event, output_variables
-      
-  def quit(self):
-    """This is called when the server is about to quit."""
-    try:
-      self.parent_conn.send('quit') #The thread (deviceloop) must understand this
-      self.p.join() #or we will hang
-    except AttributeError:
-      pass
-    else:
-      raise
-    
-    save_settings()
-    
-  def interface(self):
-    return
-    {'initialization variables': ['address', 'port', 'authkey'],
-     'input variables': None,
-     'input events': None,
-     'output events': {'go': 'Start the experiment by moving it from the wait phase',
-                       'abort': 'Halt the experiment by moving to the wait phase',
-                       'quit': 'Quit our server'}}
+    #Any data/events produced by the deviceloop will be put on this queue
+    #and be consumed by the main thread as required 
+    self.queue_to_parent = queue_to_parent
+
+    #Any data/events routed to the device from the statemachine or other devices
+    #by the main thread    
+    self.queue_from_parent = mp.Queue() 
   
-  def deviceloop(self, child_conn):
-    """Child conn is the communication line to the other thread. remote_conn is
-    the line to the client part of the controller. 
-    Functions of the deviceloop:
-    1. Keep a record of command latencies. Command latencies are measured from
-    the time the 'poll' command sent in a state transition to the time at which
-    the device acknowledges the command. For devices where the work is done in
-    the device loop this is computed in the device loop itself (as shown here).
-    For devices where the work is done in a separate process and the device
-    loop merely communicates with
+    self.setup_interface()
+  
+  def start(self):
+    self.p = mp.Process(target=self.deviceloop)
+    self.p.start()
+
+  def stop(self):
+    if hasattr(self,p):
+      self.queue_from_parent.put(['event','quit'])
+      self.p.join() #this could hang, maybe do timeout and terminate?
+      logger.debug('Successfully stopped')
+    else:
+      logger.debug('deviceloop not started yet')
+        
+  def restart(self):
+    """."""  
+    self.stop()
+    self.start()
+    logger.debug('Restarted')    
+                        
+  def quit(self):
+    self.stop()
+      
+  def get_settings(self):
+    """Return a dictionary of settable variables and triggerable events.
+    Each list 
+    """
+    vars = []
+    settable = self.interface['input variables']
+    for kv in settable:
+      if kv[2] == True:#Visible to user
+        #var name, description, editable, value 
+        vars.append([kv[0], kv[1], kv[3], self.__dict__[key]])
+        
+    events = {}
+    settable = self.interface['input events'] 
+    for kv in settable:
+      if kv[2] == True:#User triggerable
+        #event name, description
+        events.append([kv[0], kv[1]])
     
-    The server"""
-    logger.debug('Starting device loop')  
-    ping_interval_s = 1
-    last_ping_at = default_timer()
+    settable = {'vars': vars, 'events': events}
+    return settable
+  
+  def set_variables(self, vars):
+    """Copy values from settings_dict into class variables if we allow it."""
+    settable = self.interface['input variables']    
+    for kv in vars:
+      if self.__dict__.has_key(kv[0]) and settable.has_key(kv[0]):
+        if settable[kv[3]] == True:
+          self.__dict__[kv[0]] = kv[1]
+      
+  #Reimplement the following functions as needed
+  def setup_interface(self):
+    """Create a dictionary that describe the device and its interface. This is 
+    useful for documentation, when we want to know what are the inputs and 
+    outputs for the device.
     
+    This dictionary is consulted when the experiment is being instantiated and
+    the device hook ups are checked for validity.
+        
+    1. 'device name' - A name for this class of device
+    2. 'description' - an english language description for this device 
+    3. 'input variables' - can consume variables produced by other devices.
+       [string description, visible to user, modifiable via interface T/F] 
+    4. 'output variables' - produced by the device and can be routed to other devices
+       string description
+    5. 'input events' - can be triggered by statemachine events
+       [string description, triggerable via user interface T/F]
+    6. 'output events' - can be hooked up to change state machine state.
+       string description
+    These are lists because we want to maintain an order for display purposes
+       
+    Note that, for controlling the device, we are free to set up more complex 
+    interfaces. This interface description is used by the built in gobesh server 
+    to produce a basic control panel for the device.
+    
+    The base device doubles as a simple working device to test out Gobesh
+    """
+    self.interface = \
+    {'device name': 'Base Device',
+     'description': 'Base device with examples of how to do things',
+     'input variables': [['dx','dx', False, False], 
+                         ['dy','dy', False, False], 
+                         ['dz','dz', False, False],
+                         ['rate','rate (Hz)', True, True],
+                         ['sigma', 'sigma', True, True], 
+                         ['rho', 'rho', True, True], 
+                         ['beta', 'beta', True, True]],
+     'output variables': [['x','x'], ['y','y'], ['z','z'], 
+                          ['dx', 'dx'], ['dy', 'dy'], ['dz', 'dz']],
+     'input events': [['perturb', 'Perturb the x,y,z value randomly', True]],
+     'output events': [['random_event', 'An event generated randomly']]}
+            
+  def deviceloop(self):
+    """The details of this method will differ from device to device."""
+    logger.debug('Starting device loop')
     keep_running = True
     while keep_running:
-      if child_conn.poll():
-        msg = child_conn.recv()
-        time_msg_recvd = default_timer()
-        if time_msg_recvd - last_ping_at >= ping_interval:
-          last_ping_at = time_msg_recvd
-          child_conn.send(['latency ms', latency_ms]) 
+      if not self.queue_from_parent.empty():
+        msg = self.queue_from_parent.get()
+        if msg[0] == 'variable':
+          #Code to handle variable exchange
+          var_name = msg[1]
+          var_value = msg[2]
+        elif msg[0] == 'event':
+          #Code to handle events
+          event_name = msg[1]
+          if event_name == 'quit':
+            keep_running = False
         
-        if msg == 'quit':
-          keep_running = False
-          logger.debug('Received quit instruction')
-          break
+        elif msg[0] == 'get settings':
+          #Return us a dictionary of variables, with values and whether they
+          #are readonly
+          settings_dict = self.get_settings()
+          self.queue_to_parent.put([self.name, 'settings', settings_dict])
+          
+        elif msg[0] == 'set variables':
+          #We have been given new settings
+          self.set_variables(msg[1])
+            
+        elif msg[0] == 'time stamp':
+          #Handle time stamping
+          time_stamp = msg[1]
+          
+      #Code for main device operations goes here
+      pass
+    
+    logger.debug('Exited device loop')
 
-
-    logger.debug('Exited successfully')
+    
