@@ -9,16 +9,18 @@ import time #For the timestamp and sleep function
 import multiprocessing as mp #For threading
 
 from wsgiref.simple_server import make_server
+from wsgiref.util import shift_path_info
 from cgi import parse_qs, escape
 
 logger = logging.getLogger('Gobesh')
 
 class GExperiment:
-
+  """."""
   def __init__(self, DeviceDefinitions):
     self.parent_q = mp.Queue() #The devices talk back to the main thread via this
-    self.initialize_device_list(DeviceDefinitions)
-        
+    self.initialize_device_list(DeviceDefinitions) #
+    
+    #The experiment isn't running yet    
     self.host = 'localhost'
     self.port = 8080
     self.p = mp.Process(target=self.start_web_handler)
@@ -29,15 +31,11 @@ class GExperiment:
     httpd.serve_forever()
     
   def web_handler(self, environ, start_response):
-    if environ['SCRIPT_NAME'] == '':
+    pth = shift_path_info(environ)
+    if pth == '':#Root page
       response_body = self.index()
     else:
-      response_body = """
-<html>
-<body>
-Unknown action
-</body>
-</html>"""
+      response_body = self.device_operation(pth, environ)
     
     status = '200 OK'
     
@@ -52,9 +50,54 @@ Unknown action
     """Return a list of devices."""
     html = "<html><body>"
     for dev in self.devices:
-      html += dev.name + "</br>"
+      html += "<a href='/" + dev.name + "'>" + dev.name + "</br>"
     html += "</body></html>"
     return html
+  
+  def device_operation(self, pth, environ):
+    # Find which device it was
+    this_dev = None
+    for dev in self.devices:
+      if dev.name == pth:
+        this_dev = dev
+        break
+
+    if this_dev == None:
+      html = "<html><body>No device called" + pth + "</body></html>"
+      return html
+    else:
+      pth = shift_path_info(environ)
+      if pth != None: #An attempt to trigger an event?
+        self.trigger_event([this_dev.name, pth])
+        
+      #show the device and update variables if needed etc.
+      if environ['QUERY_STRING'] != '':#We want to try and set some settings
+        # Returns a dictionary containing lists as values.
+        d = parse_qs(environ['QUERY_STRING'])        
+        print 'Pretending to set'
+      
+      settings = this_dev.get_settings()
+        
+      # The device display
+      html = "<html><body>"  
+      #Events
+      events = settings['events']
+      for event in events:
+        html += "<a href='/" + this_dev.name + "/trigger_event/" + event[0] + "' title='" + event[1] + "'>" + event[0] + "</a></br>"
+      
+      html += """<form method="get" action="%s">""" %(this_dev.name)
+      #Variables
+      vars = settings['variables']
+      for var in vars:
+        if var[3]: #Editable or not?
+          disabled_text = ""
+        else:
+          disabled_text = " disabled='disabled' "
+        html += """<p>%s: <input type="text" name="%s" title="%s" value="%s" %s/></p>""" %(var[0], var[0], var[1], var[4], disabled_text)
+      html += """<p><input type="submit" value="Submit"></p>"""
+      html += "</form>"  
+      html += "</body></html>"
+      return html      
 
   def initialize_device_list(self, DeviceDefinitions):
     self.devices = []

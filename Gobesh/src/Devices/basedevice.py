@@ -25,8 +25,13 @@ class GBaseDevice():
     #by the main thread    
     self.queue_from_parent = mp.Queue() 
   
+    #This allows the main thread to perform some variable read/writes without
+    #having to go through the queues
+    self.lock = mp.Lock()
+    
     self.setup_interface()
-  
+    self.init_variables()
+    
   def start(self):
     self.p = mp.Process(target=self.deviceloop)
     self.p.start()
@@ -47,36 +52,54 @@ class GBaseDevice():
                         
   def quit(self):
     self.stop()
-      
+  
+  def init_variables(self):
+    """Use self.interface to setup and initialize variables."""
+    for kv in self.interface['input variables']:
+      self.__dict__[kv[0]] = kv[5]
+     
   def get_settings(self):
     """Return a dictionary of settable variables and triggerable events.
     Each list 
     """
     vars = []
     settable = self.interface['input variables']
+    self.lock.acquire()
     for kv in settable:
-      if kv[2] == True:#Visible to user
-        #var name, description, editable, value 
-        vars.append([kv[0], kv[1], kv[3], self.__dict__[key]])
+      if kv[3] == True:#Visible to user
+        #var name, description, type, editable, value 
+        vars.append([kv[0], kv[1], kv[2], kv[4], self.__dict__[kv[0]]])
+    self.lock.release()
         
-    events = {}
+    events = []
     settable = self.interface['input events'] 
     for kv in settable:
       if kv[2] == True:#User triggerable
         #event name, description
         events.append([kv[0], kv[1]])
     
-    settable = {'vars': vars, 'events': events}
-    return settable
+    settings = {'variables': vars, 'events': events}
+    return settings
   
   def set_variables(self, vars):
-    """Copy values from settings_dict into class variables if we allow it."""
-    settable = self.interface['input variables']    
+    """Copy values from settings_dict into class variables if we allow it.
+    vars is a list of lists. Each sub list consists of the variable name,
+    and the variable value"""
+    settable = self.interface['input variables']
+    self.lock.acquire()
     for kv in vars:
-      if self.__dict__.has_key(kv[0]) and settable.has_key(kv[0]):
-        if settable[kv[3]] == True:
-          self.__dict__[kv[0]] = kv[1]
-      
+      for kv_set in settable:
+        if (kv[0] == kv_set[0]):
+          if kv_set[4] and self.__dict__.has_key(kv[0]):
+            if kv_set[2] == 'f':
+              self.__dict__[kv[0]] = float(kv[1])
+            else:
+              self.__dict__[kv[0]] = kv[1]
+          break #Breaks us out of kv_set loop
+    self.validate_variables()#User defined, if needed
+    self.lock.release()
+    
+          
   #Reimplement the following functions as needed
   def setup_interface(self):
     """Create a dictionary that describe the device and its interface. This is 
@@ -89,7 +112,10 @@ class GBaseDevice():
     1. 'device name' - A name for this class of device
     2. 'description' - an english language description for this device 
     3. 'input variables' - can consume variables produced by other devices.
-       [string description, visible to user, modifiable via interface T/F] 
+       [var name, string description, data type, visible to user, modifiable via interface T/F, default value] 
+       data type can be:
+        'f' for numberic, passed as float
+        's' for string
     4. 'output variables' - produced by the device and can be routed to other devices
        string description
     5. 'input events' - can be triggered by statemachine events
@@ -107,17 +133,21 @@ class GBaseDevice():
     self.interface = \
     {'device name': 'Base Device',
      'description': 'Base device with examples of how to do things',
-     'input variables': [['dx','dx', False, False], 
-                         ['dy','dy', False, False], 
-                         ['dz','dz', False, False],
-                         ['rate','rate (Hz)', True, True],
-                         ['sigma', 'sigma', True, True], 
-                         ['rho', 'rho', True, True], 
-                         ['beta', 'beta', True, True]],
+     'input variables': [['dx','dx', 'f', False, False, 0], 
+                         ['dy','dy', 'f', False, False, 0], 
+                         ['dz','dz', 'f', False, False, 0],
+                         ['rate','rate (Hz)', 'f', True, True, 200],
+                         ['sigma', 'sigma', 'f', True, True, 10], 
+                         ['rho', 'rho', 'f', True, True, 28], 
+                         ['beta', 'beta', 'f', True, True, 2.66]],
      'output variables': [['x','x'], ['y','y'], ['z','z'], 
                           ['dx', 'dx'], ['dy', 'dy'], ['dz', 'dz']],
      'input events': [['perturb', 'Perturb the x,y,z value randomly', True]],
      'output events': [['random_event', 'An event generated randomly']]}
+  
+  def validate_variables(self):
+    """Reimplement this if we need to check parameter settings for sanity."""
+    pass
             
   def deviceloop(self):
     """The details of this method will differ from device to device."""
@@ -135,16 +165,7 @@ class GBaseDevice():
           event_name = msg[1]
           if event_name == 'quit':
             keep_running = False
-        
-        elif msg[0] == 'get settings':
-          #Return us a dictionary of variables, with values and whether they
-          #are readonly
-          settings_dict = self.get_settings()
-          self.queue_to_parent.put([self.name, 'settings', settings_dict])
-          
-        elif msg[0] == 'set variables':
-          #We have been given new settings
-          self.set_variables(msg[1])
+                  
             
         elif msg[0] == 'time stamp':
           #Handle time stamping
