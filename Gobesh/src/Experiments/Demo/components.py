@@ -13,6 +13,7 @@ import gobesh #our framework
 
 #You can import the modules
 import basedevice
+import gcontroller
 
 #Or define them right here
 
@@ -56,12 +57,12 @@ The inner dictionary must contain the following entries:
                  definition
 'input variables' - a list of variable names and what they are connected to."""
 DeviceDefinitions = {
-'controller': {'class': basedevice.GBaseDevice,
+'controller': {'class': gcontroller.GController,
                'input events':None,
                'input variables':None},
 'device2': {'class': basedevice.GBaseDevice,
                'input events':None,
                'input variables':None}}
 
-expt = gobesh.GExperiment(DeviceDefinitions)
+expt = gobesh.GExperiment(StateMachine, DeviceDefinitions)
 expt.run()

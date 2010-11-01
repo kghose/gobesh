@@ -37,7 +37,7 @@ class GBaseDevice():
     self.p.start()
 
   def stop(self):
-    if hasattr(self,p):
+    if hasattr(self,'p'):
       self.queue_from_parent.put(['event','quit'])
       self.p.join() #this could hang, maybe do timeout and terminate?
       logger.debug('Successfully stopped')
@@ -131,7 +131,7 @@ class GBaseDevice():
     The base device doubles as a simple working device to test out Gobesh
     """
     self.interface = \
-    {'device name': 'Base Device',
+    {'device type': 'Base Device',
      'description': 'Base device with examples of how to do things',
      'input variables': [['dx','dx', 'f', False, False, 0], 
                          ['dy','dy', 'f', False, False, 0], 
