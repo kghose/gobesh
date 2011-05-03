@@ -3,6 +3,10 @@
 \begin_document
 \begin_header
 \textclass article
+\begin_preamble
+\usepackage{listings}
+\usepackage[usenames]{color}
+\end_preamble
 \use_default_options true
 \language english
 \inputencoding auto
@@ -64,8 +68,34 @@ Gobesh is a software framework for running experiments.
  (such as C) to Python allow devices to be written in any language and hooked
  into Gobesh.
  The use and philosophy of Gobesh is introduced in this document by using
- an example - a psychophysical experiment using a two interval forced choice
- experiment with simultaneous neurophysiological data collection.
+ two examples.
+ The first example is a complete but reduced experiment illustrating all
+ the features of Gobesh and showing how to use them.
+ It is a lorentz attractor simulator that allows the user to enter different
+ starting points and watch the trajectory evolve.
+ The second is a practical illustration: a psychophysical experiment using
+ a two interval forced choice experiment with simultaneous neurophysiological
+ data collection.
+\end_layout
+
+\begin_layout Standard
+\begin_inset ERT
+status open
+
+\begin_layout Plain Layout
+
+
+\backslash
+lstset{language=Python}
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Part
+Introduction
 \end_layout
 
 \begin_layout Section
@@ -80,7 +110,7 @@ I wrote Gobesh because I wanted a computer framework with which to run my
  Experiments vary quite a bit in their requirements and data collection
  hardware changes over the years.
  I wanted a framework that was modular enough to allow a collection of easily
- swappable parts that allows the easy creation an debugging of experiments
+ swappable parts that allows the easy creation and debugging of experiments
  and can be learned by scientists with minimal computer programming experience.
  
 \end_layout
@@ -89,12 +119,12 @@ I wrote Gobesh because I wanted a computer framework with which to run my
 My first exposure to experiment control software of this kind was lablib,
  written by John Maunsell.
  I found lablib's user interface and modular concept very practical, but
- I did not like that everything was written in C and written to only run
- on Macintosh hardware.
- The complex integration of user interface and experiment control flow and
- the intricacies of threading and pointers and data structures in C make
- writing and debugging a new plugin for an experiment a tedious process
- until the experimenter is very familiar with the internals of lablib.
+ I did not like that everything was written in Objective C and written to
+ only run on Macintosh hardware.
+ The complex interdependence of user interface and experiment control flow
+ and the intricacies of threading and pointers and data structures in C
+ can make writing and debugging a new plugin for an experiment a tedious
+ process until the experimenter is very familiar with the internals of lablib.
  
 \end_layout
 
@@ -126,6 +156,11 @@ The framework should allow easy reuse of standard modules for new experiments
 \end_layout
 
 \begin_layout Enumerate
+The framework should encourage a modular approach to designing code for
+ experiments
+\end_layout
+
+\begin_layout Enumerate
 The framework should allow easy integration of external experimental devices
 \end_layout
 
@@ -149,6 +184,767 @@ I picked Python as the language for Gobesh as I had finished transitioning
  As will become apparent over the next few chapters Python also has many
  standard modules and features that made it quite convenient to use for
  this framework.
+\end_layout
+
+\begin_layout Part
+Design (Using the Lorentz attractor example)
+\end_layout
+
+\begin_layout Standard
+An experiment consists of a group of devices that present stimuli, collect
+ and record data, do computations, display the data to the user and allow
+ the user to interact with the experiment.
+ An example using a Lorentz attractor is presented below.
+ This reduced application has most of the components expected in an experiment
+ setup.
+\end_layout
+
+\begin_layout Section
+Lorentz Attractor Experiment
+\end_layout
+
+\begin_layout Standard
+In this 
+\begin_inset Quotes eld
+\end_inset
+
+experiment
+\begin_inset Quotes erd
+\end_inset
+
+ the user wants to setup parameters for the Lorentz Equation and a starting
+ point and let the system evolve.
+ The user wants to see the trajectory as it is computed and may want to
+ save the trajectories in a data file.
+ The experiment consists of a block of runs.
+ The number of simulation steps in each run and the number of runs are set
+ by the experimenter.
+ The starting point of the trajectory for each run is chosen randomly from
+ a range of values set by the experimenter.
+ We set the arbitrary requirement that the user can change the simulation
+ steps, number of runs and starting point limits at any time, but can change
+ the parameters of the equation only when the simulation is stopped.
+\end_layout
+
+\begin_layout Subsection
+Gobesh components
+\end_layout
+
+\begin_layout Standard
+
+\end_layout
+
+\begin_layout Standard
+This experiment can be described by the following state machine and device
+ list
+\end_layout
+
+\begin_layout Standard
+\begin_inset Float table
+wide false
+sideways false
+status open
+
+\begin_layout Plain Layout
+\begin_inset Tabular
+<lyxtabular version="3" rows="11" columns="4">
+<features>
+<column alignment="left" valignment="top" width="0">
+<column alignment="left" valignment="top" width="1.5in">
+<column alignment="left" valignment="top" width="1.1in">
+<column alignment="left" valignment="top" width="1in">
+<row>
+<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+State
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+Description
+\end_layout
+
+\end_inset
+</cell>
+<cell multicolumn="1" alignment="left" valignment="top" topline="true" bottomline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+Transitions
+\end_layout
+
+\end_inset
+</cell>
+<cell multicolumn="2" alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+wait
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+Standard waiting state
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+gcontroller.go
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+computing
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+gcontroller.quit
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+quit
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+computing
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+Hold this state until all the simulation steps are done
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+gcontroller.abort
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+wait
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+lorentz.done
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+run done
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+run done
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+Go to this state once all simulation steps are done
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+controller.next_run
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+computing
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+controller.stop
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+wait
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+quit
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+This closes up the server and exits
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+</cell>
+</row>
+</lyxtabular>
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Plain Layout
+\begin_inset Caption
+
+\begin_layout Plain Layout
+States in Lorentz experiment
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Float table
+wide false
+sideways false
+status open
+
+\begin_layout Plain Layout
+\begin_inset Tabular
+<lyxtabular version="3" rows="4" columns="2">
+<features>
+<column alignment="center" valignment="top" width="0">
+<column alignment="center" valignment="top" width="0">
+<row>
+<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+Device
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+Description
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+gcontroller
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+Builtin gobesh controller
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+controller
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+Controller for this experiment
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+lorentz
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+Computational module
+\end_layout
+
+\end_inset
+</cell>
+</row>
+</lyxtabular>
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Plain Layout
+\begin_inset Caption
+
+\begin_layout Plain Layout
+Devices in Lorentz experiment
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Section
+Architecture
+\end_layout
+
+\begin_layout Standard
+'Gobesh' is the main thread that instantiates the devices, sets them off
+ in their own threads, sets up queues to let the main thread talk with the
+ devices and runs the statemachine, responding to device events and commanding
+ devices by sending events to them.
+\end_layout
+
+\begin_layout Subsection
+Interprocess communication
+\end_layout
+
+\begin_layout Standard
+Communication between a device thread and the main loop thread is done using
+ sockets (python's multiprocessing.connection module).
+ Empirically, using a 2008 macbook (and a 2008 mac on a lab LAN) the latencies
+ for passing simple messages between processes on the same machine is 30
+ microseconds and between machines connected on the LAN is 120 microseconds.
+ If you need finer timing you need a different framework, at least for the
+ parts of your experiment that need, say, microsecond accurate and responsive
+ timing.
+\end_layout
+
+\begin_layout Section
+Writing a device
+\end_layout
+
+\begin_layout Standard
+While the experiment advances via the state machine (which is Gobesh's core)
+ the heavy lifting is done by devices.
+ Events from the device 
+\end_layout
+
+\begin_layout Standard
+At a rate set by the experimenter (and constrained by the operating system)
+ the core sequentially polls all the devices in an experiment.
+ The poll supplies the device with any variables and state events it needs
+ and returns with any variables and device events it produces.
+ The poll can not be blocking.
+ It must consume minimum time.
+ It is expected that all but the simplest computations be done 
+\end_layout
+
+\begin_layout Subsection
+API to be exposed to Gobesh
+\end_layout
+
+\begin_layout Standard
+A device implementation needs to have the following properties
+\end_layout
+
+\begin_layout Enumerate
+It needs to be written as a class that can be imported and instantiated
+ by Gobesh.
+\end_layout
+
+\begin_layout Enumerate
+The class should have the following methods that will be called by Gobesh
+ (in lifecycle order):
+\end_layout
+
+\begin_deeper
+\begin_layout Enumerate
+initialize()
+\end_layout
+
+\begin_layout Enumerate
+poll()
+\end_layout
+
+\begin_layout Enumerate
+quit()
+\end_layout
+
+\end_deeper
+\begin_layout Enumerate
+Data is exchanged between the device and the main thread via pipes.
+\end_layout
+
+\begin_layout Standard
+This is shown in the example listing below
+\end_layout
+
+\begin_layout Standard
+\begin_inset ERT
+status open
+
+\begin_layout Plain Layout
+
+
+\backslash
+lstinputlisting{../Src/Devices/basedevice.py}
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+The actual device could be running in a different thread, as a different
+ process or on a different machine.
+\end_layout
+
+\begin_layout Subsection
+Required device interface documentation
+\end_layout
+
+\begin_layout Standard
+The interface() method (seen in the listing above) is 
+\emph on
+not required
+\emph default
+ for Gobesh to use the device.
+ This method should return details about the interface for the device: what
+ the device's class name is, what inputs and outputs it requires and a descripti
+on of what it does in the dictionary format shown in the listing with the
+ given keys.
+ The long term aim is to have a graphical program to design experiments
+ and insert devices.
+ This interface description would then be used by the graphical designer
+ to manage the connection of the device with the rest of the system and
+ to pass the informaiton on to the user.
 \end_layout
 
 \begin_layout Section
@@ -480,7 +1276,473 @@ reference "Flo:2ifc_devices"
 \end_inset
 
 .
+ Each device receives state events, and data from other devices.
+ Each device, in turn, sends out device events and produces data.We will
+ now consider each device in turn.
+\end_layout
+
+\begin_layout Standard
+Standard devices
+\end_layout
+
+\begin_layout Standard
+Experiment specific devices
+\end_layout
+
+\begin_layout Subsubsection
+controller
+\end_layout
+
+\begin_layout Standard
+This device conveys user commands to the state machine to start and pause
+ the exeriment as well as to quit from the experment server altogether.
+\end_layout
+
+\begin_layout Subsubsection
+fixation detector(s)
+\end_layout
+
+\begin_layout Standard
+This device is told the fixation window location and radius.
+ It is passed the current eye position and emits 
+\begin_inset Quotes eld
+\end_inset
+
+fix
+\begin_inset Quotes erd
+\end_inset
+
+ or 
+\begin_inset Quotes eld
+\end_inset
+
+nofix
+\begin_inset Quotes erd
+\end_inset
+
+ events depending on whether the eye position is entering the fixation window
+ or leaving it.
+ Other variables set different parameters 
+\end_layout
+
+\begin_layout Subsubsection
+delay timer(s)
+\end_layout
+
+\begin_layout Subsubsection
+trial logic
+\end_layout
+
+\begin_layout Subsubsection
+eye position
+\end_layout
+
+\begin_layout Subsubsection
+display
+\end_layout
+
+\begin_layout Section
+Data Files and data synchronization
+\end_layout
+
+\begin_layout Standard
+Gobesh is designed to allow use of networked devices, potentially running
+ on different machines.
+ A device can decide to save data to its own file and/or pass data to another
+ device which takes care of storing it.
+ In general devices collecting data 
+\begin_inset Quotes eld
+\end_inset
+
+at a high rate
+\begin_inset Quotes erd
+\end_inset
+
+ should save it to a local file.
+ The 
+\end_layout
+
+\begin_layout Section
+Synchronization
+\end_layout
+
+\begin_layout Standard
+When devices flag
+\end_layout
+
+\begin_layout Section
+Threaded or not
+\end_layout
+
+\begin_layout Section
+Server and client sides for a device
+\end_layout
+
+\begin_layout Standard
+When to split 
+\end_layout
+
+\begin_layout Section
+Appendix
+\end_layout
+
+\begin_layout Subsection
+Testing socket latency on your system
+\end_layout
+
+\begin_layout Standard
+Client code:
+\end_layout
+
+\begin_layout Standard
+\begin_inset listings
+lstparams "language=Python,tabsize=2"
+inline false
+status open
+
+\begin_layout Plain Layout
+
+# Echo client program 
+\end_layout
+
+\begin_layout Plain Layout
+
+from multiprocessing.connection import Client
+\end_layout
+
+\begin_layout Plain Layout
+
+import time
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+def messageme(dt,conn, message):
+\end_layout
+
+\begin_layout Plain Layout
+
+	conn.send(message)
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+address = ('cruncher-2.local', 6000)
+\end_layout
+
+\begin_layout Plain Layout
+
+#address = ('', 6000)
+\end_layout
+
+\begin_layout Plain Layout
+
+conn = Client(address, authkey='cs')
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+while True:
+\end_layout
+
+\begin_layout Plain Layout
+
+	msg=raw_input('Enter string ')
+\end_layout
+
+\begin_layout Plain Layout
+
+	tsend = time.time()
+\end_layout
+
+\begin_layout Plain Layout
+
+	conn.send(tsend)
+\end_layout
+
+\begin_layout Plain Layout
+
+	while not conn.poll():
+\end_layout
+
+\begin_layout Plain Layout
+
+		pass
+\end_layout
+
+\begin_layout Plain Layout
+
+	trecv = time.time()
+\end_layout
+
+\begin_layout Plain Layout
+
+	dt_client = conn.recv()
+\end_layout
+
+\begin_layout Plain Layout
+
+	ttrip = (trecv - tsend - dt_client)/2.0
+\end_layout
+
+\begin_layout Plain Layout
+
+	print 'Average trip time', ttrip*1000, 'ms'
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Server code:
+\end_layout
+
+\begin_layout Standard
+\begin_inset listings
+lstparams "breaklines=true,language=Python,tabsize=2"
+inline false
+status open
+
+\begin_layout Plain Layout
+
+import multiprocessing.connection as mpc
+\end_layout
+
+\begin_layout Plain Layout
+
+import time
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+listener = mpc.Listener(('', 6000), authkey='cs')
+\end_layout
+
+\begin_layout Plain Layout
+
+remote_conn = listener.accept()
+\end_layout
+
+\begin_layout Plain Layout
+
+print('Connection accepted from:' + listener.last_accepted[0] + ':%d' %(listener.l
+ast_accepted[1]))
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+while True:
+\end_layout
+
+\begin_layout Plain Layout
+
+	if remote_conn.poll():
+\end_layout
+
+\begin_layout Plain Layout
+
+		trecv = time.time()
+\end_layout
+
+\begin_layout Plain Layout
+
+		tsend_client = remote_conn.recv()
+\end_layout
+
+\begin_layout Plain Layout
+
+		tsend = time.time()
+\end_layout
+
+\begin_layout Plain Layout
+
+		remote_conn.send(tsend - trecv)
+\end_layout
+
+\begin_layout Plain Layout
+
+		print 'Boing!'
+\end_layout
+
+\end_inset
+
+ttrip gives the latency with which the socket message is received.
+ On a lab network, between two machines running Mac OS X 10.5.2 I get average
+ latencies of 0.22 ms
+\end_layout
+
+\begin_layout Part
+Notes (need to be transferred into the main text as things are frozen)
+\end_layout
+
+\begin_layout Section
+Specal devices
+\end_layout
+
+\begin_layout Standard
+The following devices serve special purposes and, if instantiated in the
+ experiment, have special priviledges.
+\end_layout
+
+\begin_layout Standard
+VariableServer - this device, operating through a socket, allows a client
+ to ask for variables (or can push variables to a client when they a re
+ available) and can receive variables pushed from a client.
+ This server allows an external program to display variables or to manipulate
+ variables in the experiment.
+ The VariableServer has access to all variables that any device declares
+ as an input or output variable as well as any device or state machine state
+ changes.
+ In contrast to a regular device these variables do not have to be explicitly
  
+\end_layout
+
+\begin_layout Standard
+WebServer - this special device is initialized with a list of all the devices
+ and variables
+\end_layout
+
+\begin_layout Section
+Displaying data
+\end_layout
+
+\begin_layout Standard
+XMLHttpRequest(), HTTP streaming, wsgiref
+\end_layout
+
+\begin_layout Section
+Variable definitions
+\end_layout
+
+\begin_layout Standard
+two element string list ['','']
+\end_layout
+
+\begin_layout Standard
+\begin_inset Tabular
+<lyxtabular version="3" rows="4" columns="2">
+<features>
+<column alignment="center" valignment="top" width="0">
+<column alignment="center" valignment="top" width="0">
+<row>
+<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+String
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+Meaning
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+editable
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+always editable
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+run lock
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+locked when running
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+save lock
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+locked when saving
+\end_layout
+
+\end_inset
+</cell>
+</row>
+</lyxtabular>
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+First element 
+\end_layout
+
+\begin_layout Standard
+editable
+\end_layout
+
+\begin_layout Standard
+e = only editable when stopped editable
 \end_layout
 
 \end_body
