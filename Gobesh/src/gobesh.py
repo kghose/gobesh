@@ -14,23 +14,17 @@ from cgi import parse_qs, escape
 
 logger = logging.getLogger('Gobesh')
 
-class GExperiment:
-  """."""
-  def __init__(self, DeviceDefinitions):
-    self.parent_q = mp.Queue() #The devices talk back to the main thread via this
-    self.initialize_device_list(DeviceDefinitions) #
-    
-    #The experiment isn't running yet    
-    self.host = 'localhost'
-    self.port = 8080
-    self.p = mp.Process(target=self.start_web_handler)
-    self.p.start()
+class GWebHandler:
+  """A convenience base class to encapsulate the webinterface for Gobesh. This
+  is inherited by GExperiment. Reduces clutter in GExperiment"""
 
-  def start_web_handler(self):
-    httpd = make_server(self.host, self.port, self.web_handler)
-    httpd.serve_forever()
+  def run_web_server(self):
+    """This should be started in a new thread."""
+    self.httpd = make_server(self.host, self.port, self.web_handler)
+    self.httpd.serve_forever()
     
   def web_handler(self, environ, start_response):
+    """Application called when we interact with the webserver."""
     pth = shift_path_info(environ)
     if pth == '':#Root page
       response_body = self.index()
@@ -48,66 +42,143 @@ class GExperiment:
     
   def index(self):
     """Return a list of devices."""
-    html = "<html><body>"
+    html = "<html><title>Gobesh</title><body>"
     for dev in self.devices:
       html += "<a href='/" + dev.name + "'>" + dev.name + "</br>"
     html += "</body></html>"
     return html
   
-  def device_operation(self, pth, environ):
+  def device_operation(self, device_name, environ):
     # Find which device it was
     this_dev = None
     for dev in self.devices:
-      if dev.name == pth:
+      if dev.name == device_name:
         this_dev = dev
         break
 
     if this_dev == None:
-      html = "<html><body>No device called" + pth + "</body></html>"
+      html = "<html><body>No device called" + device_name + "</body></html>"
       return html
-    else:
-      pth = shift_path_info(environ)
-      if pth != None: #An attempt to trigger an event?
-        self.trigger_event([this_dev.name, pth])
-        
-      #show the device and update variables if needed etc.
-      if environ['QUERY_STRING'] != '':#We want to try and set some settings
-        # Returns a dictionary containing lists as values.
-        d = parse_qs(environ['QUERY_STRING'])        
-        print 'Pretending to set'
+    
+    #There really is a device called this
+    pth = shift_path_info(environ)
+    if pth == 'trigger_event': #An attempt to trigger an event
+      event = shift_path_info(environ)
+      self.trigger_event([this_dev.name, event])
+    
+    settings = this_dev.get_settings()
       
-      settings = this_dev.get_settings()
-        
-      # The device display
-      html = "<html><body>"  
-      #Events
-      events = settings['events']
-      for event in events:
-        html += "<a href='/" + this_dev.name + "/trigger_event/" + event[0] + "' title='" + event[1] + "'>" + event[0] + "</a></br>"
-      
-      html += """<form method="get" action="%s">""" %(this_dev.name)
-      #Variables
+    #show the device and update variables if needed etc.
+    if environ['QUERY_STRING'] != '':#We want to try and set some settings
+      # Returns a dictionary containing lists as values.
+      vars_to_set = []
+      d = parse_qs(environ['QUERY_STRING'])
       vars = settings['variables']
       for var in vars:
-        if var[3]: #Editable or not?
-          disabled_text = ""
-        else:
-          disabled_text = " disabled='disabled' "
-        html += """<p>%s: <input type="text" name="%s" title="%s" value="%s" %s/></p>""" %(var[0], var[0], var[1], var[4], disabled_text)
-      html += """<p><input type="submit" value="Submit"></p>"""
-      html += "</form>"  
-      html += "</body></html>"
-      return html      
+        if var[3]:
+          var_value = escape(d.get(var[0],[var[4]])[0])
+          vars_to_set.append([var[0], var_value])
+      this_dev.set_variables(vars_to_set)
+      settings = this_dev.get_settings()#Update the saved variables
+
+    # The device display
+    html = "<html><body>"  
+    #Events
+    events = settings['events']
+    for event in events:
+      html += "<a href='/" + this_dev.name + "/trigger_event/" + event[0] + "' title='" + event[1] + "'>" + event[0] + "</a></br>"
+    
+    html += """<form method="get" action="%s">""" %(this_dev.name)
+    #Variables
+    vars = settings['variables']
+    for var in vars:
+      if var[3]: #Editable or not?
+        disabled_text = ""
+      else:
+        disabled_text = " disabled='disabled' "
+      html += """<p>%s: <input type="text" name="%s" title="%s" value="%s" %s/></p>""" %(var[0], var[0], var[1], var[4], disabled_text)
+    html += """<p><input type="submit" value="Submit"></p>"""
+    html += "</form>"  
+    html += "</body></html>"
+    return html      
+  
+  def quit_server(self):
+    """Don't call this from same thread that is running the server."""
+    self.httpd.shutdown()
+
+  def quit(self):
+    """Reimplement this in GExperiment to shutdown devices etc."""
+    pass
+  
+  def trigger_event(msg):
+    """Reimplement this in GExperiment."""
+    pass
+    
+class GExperiment(GWebHandler):
+  """."""
+  def __init__(self, StateMachine, DeviceDefinitions):
+    self.parent_q = mp.Queue() #The devices talk back to the main thread via this
+    self.initialize_device_list(DeviceDefinitions) #
+    self.state_machine = StateMachine
+    
+    #The experiment isn't running yet    
+    self.host = 'localhost'
+    self.port = 8080
+    self.httpd = make_server(self.host, self.port, self.web_handler)
+    self.webhandler_process = mp.Process(target=self.httpd.serve_forever)
+    self.webhandler_process.start()
 
   def initialize_device_list(self, DeviceDefinitions):
     self.devices = []
     DD = DeviceDefinitions
     for key in DD.keys():
       self.devices.append(DD[key]['class'](key, self.parent_q))
+  
+  def build_routing_table(self, DeviceDefinitions):
+    """Set up a dictionary that allows us to route events and variables to the
+    correct devices."""
     
   def run(self):
-    msg = self.parent_q.get()
-    print msg
+    """The main experiment serving loop."""
+    error = False
+    state = 'Wait' #Built in start state
+    state_machine = self.state_machine
+    get_message = self.parent_q.get
+    put_message = self.parent_q.put
+    while state != 'Exit' and not error: #last state
+      #Handle messages
+      msg = get_message()
+      if msg[0] == 'event':
+        this_event = msg[1] #We are expecting a string of the form <device name>.<event name>
+        if state_machine[state].has_key(this_event):
+          #Advance state and put state events into the queue
+          put_message(['event', state + '.exit'])
+          state = state_machine[state][this_event]
+          put_message(['event', state + '.enter'])
+      elif 
+    
+    
+    #Clean up and get out
+    self.quit()
+
+    if error:
+      print 'There were errors'  
+
+  def trigger_event(self, msg):
+    """Reimplement this in GExperiment."""
+    self.parent_q.put(['event', msg[0] + '.' + msg[1]])
+
+
+  def quit(self):
+    for device in self.devices:
+      device.quit()
+
+    self.webhandler_process.terminate()#Drastic, couldn't get shutdown to work
+    #self.httpd.shutdown()
+    print 'Quit server'
+
+
+#    self.quit_server()
     
 #def quit_devices(devices):
 #  for device in devices:

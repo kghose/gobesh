@@ -1,11 +1,9 @@
-#States are Sentence case, no spaces
-#Devices are all lower case, no spaces
-#Event from a device is device name . (dot) event name
+#Uses gfakeeye to generate fake eye position data
 import sys
 sys.path.append('./Modules/') #Where all the modules live
 
 import gcontroller
-import gdemodevice
+import gfakeeye
 
 """A descriptive name for the experiment."""
 ExperimentName = 'Basic demo experiment'

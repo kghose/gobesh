@@ -1,36 +1,37 @@
-"""This module provides the basic controller device. It also provides a simple
-text based front end for testing."""
+"""This is a base device class. For most of the devices we are likely to write
+we can just inherit this base class and override the initvars and 
+device_routine methods to perform the specific tasks for our device.
+"""
 
 import multiprocessing as mp
 import logging
 logger = logging.getLogger('Gobesh.'+__name__)
 
-#Imports for this device
-import time #For the sleep function
-
-class GController:
-  """Though this is written as just another device, note that a given experiment
-  has just one controller."""
+class GTemplateDevice:
   def __init__(self):
-    #The interface for the class
-    #Can be accessed by calling .interface
+    """Usually just sets up the .interface class variable. This variable 
+    is a dictionary that tells humans and other applications what interface the
+    device has - its initialization variables, its input variables etc. Each
+    element of the dictionary is itself a dictionary with the variable as
+    the key and a brief discription as the value."""
     self.interface = \
-    {'initialization variables': ['address', 'port', 'authkey'],
+    {'initialization variables': None,
      'input variables': None,
      'input events': None,
-     'output events': {'go': 'Start the experiment by moving it from the wait phase',
-                       'abort': 'Halt the experiment by moving to the wait phase',
-                       'quit': 'Quit our server'}}
+     'output events': None}
       
   def initialize(self, vars):
-    """This is called when the server initializes."""
-    self.address = vars.get('address','')
-    self.port = vars.get('port',6000)
-    self.authkey = vars.get('authkey','gobesh controller')
+    """This is called when the server initializes the devices. 'vars' is the 
+    dictionary contained in the experiment configuration file for this device"""
+    self.initvars(vars)
     self.parent_conn, child_conn = mp.Pipe()
     self.p = mp.Process(target=self.deviceloop, args=(child_conn,))
     self.p.start()
   
+  def initvars(self, vars):
+    """This function should be be overridden in our device class."""
+    print vars
+    
   def quit(self):
     """This is called when the server is about to quit."""
     self.parent_conn.send('quit') #The thread (deviceloop) must understand this
@@ -50,8 +51,8 @@ class GController:
       msg = self.parent_conn.recv()
       if msg[0] == 'device event':
         device_event = msg[1]
-      else:
-        device_event = None
+      elif msg[0] == 'output variables':
+        output_variables = msg[1]
         
     return device_event, output_variables
   

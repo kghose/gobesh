@@ -151,6 +151,8 @@ class GBaseDevice():
             
   def deviceloop(self):
     """The details of this method will differ from device to device."""
+    import threading
+    
     logger.debug('Starting device loop')
     keep_running = True
     while keep_running:

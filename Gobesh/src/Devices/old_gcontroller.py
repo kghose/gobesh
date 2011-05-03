@@ -6,35 +6,75 @@ import logging
 logger = logging.getLogger('Gobesh.'+__name__)
 
 #Imports for this device
+import basedevice
 import time #For the sleep function
+import keyboard
 
-class GController:
-  """Though this is written as just another device, note that a given experiment
-  has just one controller."""
-  def __init__(self):
-    #The interface for the class
-    #Can be accessed by calling .interface
-    self.interface = \
-    {'initialization variables': ['address', 'port', 'authkey'],
-     'input variables': None,
-     'input events': None,
-     'output events': {'go': 'Start the experiment by moving it from the wait phase',
-                       'abort': 'Halt the experiment by moving to the wait phase',
-                       'quit': 'Quit our server'}}
-      
-  def initialize(self, vars):
-    """This is called when the server initializes."""
+class GController(basedevice.GBaseDevice):
+  """A general controller device we can use in our experiments"""
+
+  def setup_interface(self):
+    
+
+  def get_settings(self):
+    return {'address': [self.address, True],
+            'port': [self.port, True],
+            'authkey': [self.authkey, True]}
+  
+  def set_settings(self, vars):
     self.address = vars.get('address','')
     self.port = vars.get('port',6000)
     self.authkey = vars.get('authkey','gobesh controller')
-    self.parent_conn, child_conn = mp.Pipe()
-    self.p = mp.Process(target=self.deviceloop, args=(child_conn,))
-    self.p.start()
+    
   
-  def quit(self):
-    """This is called when the server is about to quit."""
-    self.parent_conn.send('quit') #The thread (deviceloop) must understand this
-    self.p.join() #or we will hang
+  def deviceloop(self):
+    """."""
+    logger.debug('Starting device loop')
+    keep_running = True
+    while keep_running:
+      if not self.queue_from_parent.empty()
+        msg = self.queue_from_parent.get()
+        if msg[0] == 'variable':
+          #Code to handle variable exchange
+          #var_name = msg[1]
+          #var_value = msg[2]
+        elif msg[0] == 'event':
+          #Code to handle events
+          event_name = msg[1]
+          if event_name == 'quit':
+            keep_running = False
+        
+        elif msg[0] == 'get settings':
+          #Return us a dictionary of variables, with values and whether they
+          #are readonly
+          settings_dict = self.get_settings()
+          self.queue_to_parent.put([self.name, 'settings', settings_dict])
+          
+        elif msg[0] == 'set settings':
+          #We have been given new settings
+          self.set_settings(msg[1])
+            
+        elif msg[0] == 'time stamp':
+          #Handle time stamping
+          #time_stamp = msg[1]
+             
+      #Code for main device operations goes here
+
+      #Listen for connections on this port. Putting 'localhost' prevents 
+      #connections from outside machines
+      listener, remote_conn = wait_for_listener(self.address, self.port, self.authkey)
+
+
+      
+    logger.debug('Exited device loop')
+
+
+
+
+
+
+
+
     
   def poll(self, timestamp, state_event, input_vars):
     """This is the call that is visible to the main loop. The main loop calls

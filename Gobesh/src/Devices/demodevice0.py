@@ -1,40 +1,37 @@
-"""This module provides the basic controller device. It also provides a simple
-text based front end for testing."""
+"""This module provides an example device that illustrates the API that has to
+be exposed to Gobesh."""
 
-import multiprocessing as mp
-import logging
+import multiprocessing as mp #For threading
+import logging #We should make use of the logging function
 logger = logging.getLogger('Gobesh.'+__name__)
 
-#Imports for this device
-import time #For the sleep function
-
-class GController:
-  """Though this is written as just another device, note that a given experiment
-  has just one controller."""
+class GDemoDevice0:
+  """This demo device illustrates the barebones of writing a device that
+  Gobesh can instantiate and run."""
   def __init__(self):
-    #The interface for the class
-    #Can be accessed by calling .interface
-    self.interface = \
-    {'initialization variables': ['address', 'port', 'authkey'],
-     'input variables': None,
-     'input events': None,
-     'output events': {'go': 'Start the experiment by moving it from the wait phase',
-                       'abort': 'Halt the experiment by moving to the wait phase',
-                       'quit': 'Quit our server'}}
+    """Use this to do any fixed initialization. This is called when the server
+    (main loop) instantiates the device objects"""
+    pass
       
-  def initialize(self, vars):
-    """This is called when the server initializes."""
-    self.address = vars.get('address','')
-    self.port = vars.get('port',6000)
-    self.authkey = vars.get('authkey','gobesh controller')
-    self.parent_conn, child_conn = mp.Pipe()
+  def initialize(self, config_dir = './', my_name = 'ADemoDevice'):
+    """This is called when the main loop initializes. Gobesh will pass it
+    It loads settings from
+    the settings file, creates pipes to communicate with the child process and
+    then starts the child process."""
+    self.generate_config_fname(config_dir, my_name)
+    self.load_settings()
+
+    #Fixed code that should be same for all devices that start a child thread
+    self.parent_conn, child_conn = mp.Pipe() #Our means of communication
     self.p = mp.Process(target=self.deviceloop, args=(child_conn,))
     self.p.start()
-  
-  def quit(self):
-    """This is called when the server is about to quit."""
-    self.parent_conn.send('quit') #The thread (deviceloop) must understand this
-    self.p.join() #or we will hang
+      
+  def load_settings(self):
+    """Load settings for this instance of the device."""
+    pass
+    
+  def save_settings(self):
+    pass
     
   def poll(self, timestamp, state_event, input_vars):
     """This is the call that is visible to the main loop. The main loop calls
@@ -54,6 +51,23 @@ class GController:
         device_event = None
         
     return device_event, output_variables
+    
+  
+  def quit(self):
+    """This is called when the server is about to quit."""
+    self.parent_conn.send('quit') #The thread (deviceloop) must understand this
+    self.p.join() #or we will hang
+    
+  
+  def interface(self):
+    return
+    {'initialization variables': ['address', 'port', 'authkey'],
+     'input variables': None,
+     'input events': None,
+     'output events': {'go': 'Start the experiment by moving it from the wait phase',
+                       'abort': 'Halt the experiment by moving to the wait phase',
+                       'quit': 'Quit our server'}}
+  
   
   def deviceloop(self, child_conn):
     """Child conn is the communication line to the other thread. remote_conn is
